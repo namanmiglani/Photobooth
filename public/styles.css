@@ -140,6 +140,68 @@ video {
   margin-top: 14px;
 }
 
+.preview-canvas--hidden {
+  display: none;
+}
+
+.frame-selector {
+  margin-top: 12px;
+  text-align: left;
+}
+
+.frame-selector__title {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 12px;
+}
+
+.frame-grid--scroll {
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(140px, 1fr);
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x mandatory;
+}
+
+.frame-option {
+  border: 3px solid transparent;
+  border-radius: 14px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  box-shadow: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  scroll-snap-align: start;
+}
+
+.frame-option:active {
+  transform: translateY(2px);
+}
+
+.frame-option.selected {
+  border-color: #7bdff2;
+  box-shadow: 0 0 0 4px rgba(123, 223, 242, 0.35);
+}
+
+.frame-option img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 10px;
+}
+
+.frame-option canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 10px;
+}
+
 .qr-wrapper {
   display: flex;
   justify-content: center;

@@ -38,6 +38,7 @@
             <div id="thumb-grid" class="thumb-grid"></div>
             <div class="actions">
               <span id="selection-count">0 / 4 selected</span>
+              <button id="retake-btn" class="button">Retake</button>
               <button id="preview-btn" class="button button--primary" disabled>Preview</button>
             </div>
           </div>
@@ -46,7 +47,11 @@
         <section id="screen-preview" class="screen">
           <div class="card">
             <h2>Your strip preview</h2>
-            <canvas id="preview-canvas" width="600" height="1800"></canvas>
+            <div class="frame-selector">
+              <p class="frame-selector__title">Choose a frame</p>
+              <div id="frame-grid" class="frame-grid frame-grid--scroll" role="list"></div>
+            </div>
+            <canvas id="preview-canvas" class="preview-canvas--hidden" width="600" height="1800"></canvas>
             <div class="actions">
               <button id="back-btn" class="button">Back</button>
               <button id="export-btn" class="button button--primary">Export & QR</button>

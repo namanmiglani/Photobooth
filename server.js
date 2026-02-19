@@ -14,6 +14,17 @@ fs.mkdirSync(exportsDir, { recursive: true });
 app.use(express.json({ limit: "25mb" }));
 app.use(express.static(publicDir));
 
+app.get("/download/:file", (req, res) => {
+  const safeName = path.basename(req.params.file);
+  const filePath = path.join(exportsDir, safeName);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).send("Not found");
+  }
+
+  return res.download(filePath, safeName);
+});
+
 app.get("/view/:file", (req, res) => {
   const safeName = path.basename(req.params.file);
   const filePath = path.join(exportsDir, safeName);
@@ -66,9 +77,9 @@ app.post("/api/upload", async (req, res) => {
     fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
 
     const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
-    const downloadUrl = `${baseUrl}/exports/${fileName}`;
+    const downloadUrl = `${baseUrl}/download/${fileName}`;
     const viewUrl = `${baseUrl}/view/${fileName}`;
-    const qrDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 256 });
+    const qrDataUrl = await QRCode.toDataURL(downloadUrl, { margin: 1, width: 256 });
 
     return res.json({ viewUrl, downloadUrl, qrDataUrl });
   } catch (error) {
