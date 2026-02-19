@@ -1,6 +1,13 @@
-const FRAME_SRC = "assets/UBC.png";
 const FRAME_WIDTH = 600;
 const FRAME_HEIGHT = 1800;
+
+const frames = [
+  { id: "ubc", label: "UBC", src: "assets/UBC.png" },
+  { id: "film", label: "Film", src: "assets/Film.png" },
+  { id: "lights", label: "Lights", src: "assets/Lights.png" },
+  { id: "red", label: "Red", src: "assets/Red.png" },
+  { id: "white", label: "White", src: "assets/White.png" }
+];
 
 const slots = [
   { x: 60, y: 60, w: 480, h: 363 },
@@ -25,15 +32,18 @@ const thumbGrid = document.getElementById("thumb-grid");
 const selectionCountEl = document.getElementById("selection-count");
 const previewBtn = document.getElementById("preview-btn");
 const previewCanvas = document.getElementById("preview-canvas");
+const frameGrid = document.getElementById("frame-grid");
 const backBtn = document.getElementById("back-btn");
 const exportBtn = document.getElementById("export-btn");
 const qrImage = document.getElementById("qr-image");
 const downloadLink = document.getElementById("download-link");
 const restartBtn = document.getElementById("restart-btn");
+const retakeBtn = document.getElementById("retake-btn");
 
 let photos = [];
 let selectedIndexes = new Set();
-let frameImage = null;
+let selectedFrameIndex = 0;
+const frameCache = new Map();
 
 const showScreen = (screenKey) => {
   Object.values(screens).forEach((screen) => screen.classList.remove("screen--active"));
@@ -49,6 +59,69 @@ const loadImage = (src) =>
     img.onerror = reject;
     img.src = src;
   });
+
+const getFrameImage = async (src) => {
+  if (frameCache.has(src)) {
+    return frameCache.get(src);
+  }
+  const img = await loadImage(src);
+  frameCache.set(src, img);
+  return img;
+};
+
+const renderComposite = (ctx, frameImage, imageElements) => {
+  ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+  ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+  imageElements.forEach((img, idx) => {
+    const slot = slots[idx];
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(slot.x, slot.y, slot.w, slot.h);
+    ctx.clip();
+    drawImageCover(ctx, img, slot.x, slot.y, slot.w, slot.h);
+    ctx.restore();
+  });
+};
+
+const buildFrameGrid = async () => {
+  if (!frameGrid) {
+    return;
+  }
+  frameGrid.innerHTML = "";
+
+  const selected = Array.from(selectedIndexes).map((index) => photos[index]);
+  const imageElements = await Promise.all(selected.map((src) => loadImage(src)));
+
+  await Promise.all(
+    frames.map(async (frame, index) => {
+      const frameImage = await getFrameImage(frame.src);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "frame-option";
+      if (index === selectedFrameIndex) {
+        button.classList.add("selected");
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = FRAME_WIDTH;
+      canvas.height = FRAME_HEIGHT;
+      const ctx = canvas.getContext("2d");
+      renderComposite(ctx, frameImage, imageElements);
+      button.appendChild(canvas);
+
+      button.addEventListener("click", async () => {
+        selectedFrameIndex = index;
+        frameGrid.querySelectorAll(".frame-option").forEach((el, idx) => {
+          el.classList.toggle("selected", idx === selectedFrameIndex);
+        });
+        await renderPreview();
+      });
+
+      frameGrid.appendChild(button);
+    })
+  );
+};
 
 const startCamera = async () => {
   const stream = await navigator.mediaDevices.getUserMedia({
@@ -88,6 +161,7 @@ const runCountdown = async (seconds) => {
 const startCaptureFlow = async () => {
   photos = [];
   selectedIndexes = new Set();
+  selectedFrameIndex = 0;
   progressEl.textContent = "0 / 6";
   showScreen("capture");
 
@@ -165,27 +239,15 @@ const drawImageCover = (ctx, img, x, y, w, h) => {
 
 const renderPreview = async () => {
   const ctx = previewCanvas.getContext("2d");
-  if (!frameImage) {
-    frameImage = await loadImage(FRAME_SRC);
-  }
+  const frame = frames[selectedFrameIndex] ?? frames[0];
+  const frameImage = await getFrameImage(frame.src);
   previewCanvas.width = FRAME_WIDTH;
   previewCanvas.height = FRAME_HEIGHT;
-  ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
 
   const selected = Array.from(selectedIndexes).map((index) => photos[index]);
   const imageElements = await Promise.all(selected.map((src) => loadImage(src)));
 
-  ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-
-  imageElements.forEach((img, idx) => {
-    const slot = slots[idx];
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(slot.x, slot.y, slot.w, slot.h);
-    ctx.clip();
-    drawImageCover(ctx, img, slot.x, slot.y, slot.w, slot.h);
-    ctx.restore();
-  });
+  renderComposite(ctx, frameImage, imageElements);
 };
 
 const exportStrip = async () => {
@@ -225,9 +287,11 @@ const exportStrip = async () => {
 
 startBtn.addEventListener("click", startCaptureFlow);
 previewBtn.addEventListener("click", async () => {
+  await buildFrameGrid();
   await renderPreview();
   showScreen("preview");
 });
 backBtn.addEventListener("click", () => showScreen("select"));
 exportBtn.addEventListener("click", exportStrip);
 restartBtn.addEventListener("click", () => showScreen("start"));
+retakeBtn.addEventListener("click", startCaptureFlow);
