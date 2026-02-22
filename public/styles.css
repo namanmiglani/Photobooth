@@ -205,7 +205,7 @@ video {
 .qr-wrapper {
   display: flex;
   justify-content: center;
-  margin: 20px 0;
+  margin: 12px 0;
 }
 
 .qr-wrapper img {
@@ -215,4 +215,29 @@ video {
   border: 4px solid #403b37;
   background: #fff;
   padding: 8px;
+}
+
+.qr-dual {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.qr-item {
+  text-align: center;
+}
+
+.qr-label {
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin: 0 0 4px;
+}
+
+.qr-loading {
+  font-size: 0.9rem;
+  color: #999;
+  margin: 40px 0;
+  font-style: italic;
 }
