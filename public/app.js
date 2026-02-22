@@ -262,6 +262,7 @@ const exportStrip = async () => {
   ctx.drawImage(previewCanvas, FRAME_WIDTH, 0);
 
   const dataUrl = exportCanvas.toDataURL("image/png");
+  const singleStripDataUrl = previewCanvas.toDataURL("image/png");
 
   downloadLink.href = dataUrl;
   downloadLink.setAttribute("download", "photobooth-strip.png");
@@ -270,7 +271,7 @@ const exportStrip = async () => {
     const response = await fetch("/api/upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataUrl })
+      body: JSON.stringify({ dataUrl: singleStripDataUrl })
     });
     const result = await response.json();
     if (result.downloadUrl) {

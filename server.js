@@ -1,15 +1,24 @@
+require("dotenv").config();
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const { nanoid } = require("nanoid");
 const QRCode = require("qrcode");
+const cloudinary = require("cloudinary").v2;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const publicDir = path.join(__dirname, "public");
 const exportsDir = path.join(publicDir, "exports");
+const CLOUDINARY_PUBLIC_ID = process.env.CLOUDINARY_PUBLIC_ID || "photobooth-latest";
 
 fs.mkdirSync(exportsDir, { recursive: true });
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.static(publicDir));
@@ -69,19 +78,22 @@ app.post("/api/upload", async (req, res) => {
       return res.status(400).json({ error: "Invalid dataUrl" });
     }
 
-    const base64 = dataUrl.split(",")[1];
-    const id = nanoid(8);
-    const fileName = `strip-${id}.png`;
-    const filePath = path.join(exportsDir, fileName);
+    if (!process.env.CLOUDINARY_CLOUD_NAME) {
+      return res.status(500).json({ error: "Cloudinary not configured" });
+    }
 
-    fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
+    const uploadResult = await cloudinary.uploader.upload(dataUrl, {
+      public_id: CLOUDINARY_PUBLIC_ID,
+      overwrite: true,
+      invalidate: true,
+      resource_type: "image",
+      format: "png"
+    });
 
-    const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
-    const downloadUrl = `${baseUrl}/download/${fileName}`;
-    const viewUrl = `${baseUrl}/view/${fileName}`;
+    const downloadUrl = uploadResult.secure_url;
     const qrDataUrl = await QRCode.toDataURL(downloadUrl, { margin: 1, width: 256 });
 
-    return res.json({ viewUrl, downloadUrl, qrDataUrl });
+    return res.json({ downloadUrl, qrDataUrl });
   } catch (error) {
     return res.status(500).json({ error: "Upload failed" });
   }

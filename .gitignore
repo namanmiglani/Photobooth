@@ -1,0 +1,6 @@
+.env
+node_modules/
+public/exports/
+.DS_Store
+public/.DS_Store
+public/exports/.DS_Store
