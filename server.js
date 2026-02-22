@@ -20,7 +20,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-app.use(express.json({ limit: "25mb" }));
+app.use(express.json({ limit: "50mb" }));
 app.use(express.static(publicDir));
 
 app.get("/download/:file", (req, res) => {
@@ -71,6 +71,38 @@ app.get("/view/:file", (req, res) => {
 </html>`);
 });
 
+app.get("/view-video/:id", async (req, res) => {
+  const videoId = req.params.id.replace(/[^a-zA-Z0-9_-]/g, "");
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const mp4Url = `https://res.cloudinary.com/${cloudName}/video/upload/${videoId}.mp4`;
+
+  return res.type("html").send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Photobooth Video</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background: #fef6e4; margin: 0; padding: 24px; text-align: center; }
+      .card { background: #fff; padding: 24px; border-radius: 16px; box-shadow: 0 12px 30px rgba(0,0,0,0.12); max-width: 480px; margin: 0 auto; }
+      video { width: 100%; border-radius: 12px; border: 3px solid #403b37; background: #000; }
+      a { display: inline-block; margin-top: 16px; padding: 12px 20px; background: #7bdff2; color: #403b37; text-decoration: none; border-radius: 999px; font-weight: 600; }
+      .tip { font-size: 0.85rem; color: #888; margin-top: 12px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Your photobooth video</h2>
+      <video src="${mp4Url}" controls playsinline autoplay muted loop></video>
+      <div>
+        <a href="${mp4Url}" download>Download Video</a>
+      </div>
+      <p class="tip">iPhone: Tap and hold the video, then tap "Save to Files" or use the download button.</p>
+    </div>
+  </body>
+</html>`);
+});
+
 app.post("/api/upload", async (req, res) => {
   try {
     const { dataUrl } = req.body;
@@ -96,6 +128,38 @@ app.post("/api/upload", async (req, res) => {
     return res.json({ downloadUrl, qrDataUrl });
   } catch (error) {
     return res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+app.post("/api/upload-video", async (req, res) => {
+  try {
+    const { dataUrl } = req.body;
+    if (!dataUrl || !dataUrl.startsWith("data:video/")) {
+      return res.status(400).json({ error: "Invalid video dataUrl" });
+    }
+
+    if (!process.env.CLOUDINARY_CLOUD_NAME) {
+      return res.status(500).json({ error: "Cloudinary not configured" });
+    }
+
+    const videoPublicId = `photobooth-video-${Date.now()}`;
+    const uploadResult = await cloudinary.uploader.upload(dataUrl, {
+      public_id: videoPublicId,
+      resource_type: "video",
+      overwrite: true,
+      invalidate: true
+    });
+
+    // Build an MP4 URL for iPhone compatibility
+    const baseUrl = uploadResult.secure_url.replace(/\.[^.]+$/, ".mp4");
+    const publicBaseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const viewUrl = `${publicBaseUrl}/view-video/${videoPublicId}`;
+    const qrDataUrl = await QRCode.toDataURL(baseUrl, { margin: 1, width: 256 });
+
+    return res.json({ videoUrl: baseUrl, viewUrl, qrDataUrl });
+  } catch (error) {
+    console.error("Video upload failed:", error);
+    return res.status(500).json({ error: "Video upload failed" });
   }
 });
 

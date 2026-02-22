@@ -1,80 +1,95 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Photobooth</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="app">
-      <header class="app__header">
-        <h1>Photobooth</h1>
-        <p>Smile, snap, pick your favorites!</p>
-      </header>
 
-      <main class="app__content">
-        <section id="screen-start" class="screen screen--active">
-          <div class="card">
-            <h2>Ready to start?</h2>
-            <p>We will take 6 photos, 2 seconds apart.</p>
-            <button id="start-btn" class="button button--primary">Start</button>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photobooth</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header class="app__header">
+      <h1>Photobooth</h1>
+      <p>Smile, snap, pick your favorites!</p>
+    </header>
+
+    <main class="app__content">
+      <section id="screen-start" class="screen screen--active">
+        <div class="card">
+          <h2>Ready to start?</h2>
+          <p>We will take 6 photos, 2 seconds apart.</p>
+          <button id="start-btn" class="button button--primary">Start</button>
+        </div>
+      </section>
+
+      <section id="screen-capture" class="screen">
+        <div class="card">
+          <h2>Get ready!</h2>
+          <p class="countdown" id="countdown">2</p>
+          <video id="video" autoplay playsinline muted></video>
+          <div class="progress" id="progress">0 / 6</div>
+        </div>
+      </section>
+
+      <section id="screen-select" class="screen">
+        <div class="card">
+          <h2>Pick 4 favorites</h2>
+          <p>Select exactly 4 photos.</p>
+          <div id="thumb-grid" class="thumb-grid"></div>
+          <div class="actions">
+            <span id="selection-count">0 / 4 selected</span>
+            <button id="retake-btn" class="button">Retake</button>
+            <button id="preview-btn" class="button button--primary" disabled>Preview</button>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section id="screen-capture" class="screen">
-          <div class="card">
-            <h2>Get ready!</h2>
-            <p class="countdown" id="countdown">2</p>
-            <video id="video" autoplay playsinline muted></video>
-            <div class="progress" id="progress">0 / 6</div>
+      <section id="screen-preview" class="screen">
+        <div class="card">
+          <h2>Your strip preview</h2>
+          <div class="frame-selector">
+            <p class="frame-selector__title">Choose a frame</p>
+            <div id="frame-grid" class="frame-grid frame-grid--scroll" role="list"></div>
           </div>
-        </section>
+          <canvas id="preview-canvas" class="preview-canvas--hidden" width="600" height="1800"></canvas>
+          <div class="actions">
+            <button id="back-btn" class="button">Back</button>
+            <button id="export-btn" class="button button--primary">Export & QR</button>
+          </div>
+        </div>
+      </section>
 
-        <section id="screen-select" class="screen">
-          <div class="card">
-            <h2>Pick 4 favorites</h2>
-            <p>Select exactly 4 photos.</p>
-            <div id="thumb-grid" class="thumb-grid"></div>
-            <div class="actions">
-              <span id="selection-count">0 / 4 selected</span>
-              <button id="retake-btn" class="button">Retake</button>
-              <button id="preview-btn" class="button button--primary" disabled>Preview</button>
+      <section id="screen-done" class="screen">
+        <div class="card">
+          <h2>All set!</h2>
+          <p>Scan a QR code to save your photo strip or video.</p>
+          <div class="qr-dual">
+            <div class="qr-item">
+              <p class="qr-label">📸 Photo Strip</p>
+              <div class="qr-wrapper">
+                <img id="qr-image" alt="Photo QR code" />
+              </div>
+            </div>
+            <div class="qr-item">
+              <p class="qr-label">🎬 Video</p>
+              <div class="qr-wrapper">
+                <img id="qr-video-image" alt="Video QR code" style="display:none" />
+                <p id="qr-video-loading" class="qr-loading">Generating video…</p>
+              </div>
             </div>
           </div>
-        </section>
-
-        <section id="screen-preview" class="screen">
-          <div class="card">
-            <h2>Your strip preview</h2>
-            <div class="frame-selector">
-              <p class="frame-selector__title">Choose a frame</p>
-              <div id="frame-grid" class="frame-grid frame-grid--scroll" role="list"></div>
-            </div>
-            <canvas id="preview-canvas" class="preview-canvas--hidden" width="600" height="1800"></canvas>
-            <div class="actions">
-              <button id="back-btn" class="button">Back</button>
-              <button id="export-btn" class="button button--primary">Export & QR</button>
-            </div>
+          <div class="actions">
+            <a id="download-link" class="button button--primary" download>Download PNG</a>
+            <button id="restart-btn" class="button">Start Over</button>
           </div>
-        </section>
+        </div>
+      </section>
+    </main>
+  </div>
 
-        <section id="screen-done" class="screen">
-          <div class="card">
-            <h2>All set!</h2>
-            <p>Scan the QR code to save your strip.</p>
-            <div class="qr-wrapper">
-              <img id="qr-image" alt="QR code" />
-            </div>
-            <div class="actions">
-              <a id="download-link" class="button button--primary" download>Download PNG</a>
-              <button id="restart-btn" class="button">Start Over</button>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
+  <script src="app.js"></script>
+</body>
 
-    <script src="app.js"></script>
-  </body>
 </html>

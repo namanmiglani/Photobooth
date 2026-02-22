@@ -39,8 +39,11 @@ const qrImage = document.getElementById("qr-image");
 const downloadLink = document.getElementById("download-link");
 const restartBtn = document.getElementById("restart-btn");
 const retakeBtn = document.getElementById("retake-btn");
+const qrVideoImage = document.getElementById("qr-video-image");
+const qrVideoLoading = document.getElementById("qr-video-loading");
 
 let photos = [];
+let captureClips = []; // stores continuous video Blobs for each of the 6 photos
 let selectedIndexes = new Set();
 let selectedFrameIndex = 0;
 const frameCache = new Map();
@@ -160,6 +163,7 @@ const runCountdown = async (seconds) => {
 
 const startCaptureFlow = async () => {
   photos = [];
+  captureClips = [];
   selectedIndexes = new Set();
   selectedFrameIndex = 0;
   progressEl.textContent = "0 / 6";
@@ -167,8 +171,30 @@ const startCaptureFlow = async () => {
 
   try {
     await startCamera();
+
+    // Determine a supported mimeType for clip recording
+    let clipMime = "video/webm;codecs=vp9";
+    if (!MediaRecorder.isTypeSupported(clipMime)) clipMime = "video/webm;codecs=vp8";
+    if (!MediaRecorder.isTypeSupported(clipMime)) clipMime = "video/webm";
+
     for (let i = 0; i < 6; i += 1) {
+      // Record a continuous video clip during the countdown
+      const clipChunks = [];
+      const clipRecorder = new MediaRecorder(video.srcObject, { mimeType: clipMime });
+      clipRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) clipChunks.push(e.data);
+      };
+      const clipDone = new Promise((resolve) => {
+        clipRecorder.onstop = () => resolve(new Blob(clipChunks, { type: "video/webm" }));
+      });
+
+      clipRecorder.start();
       await runCountdown(2);
+      clipRecorder.stop();
+
+      const clipBlob = await clipDone;
+      captureClips.push(clipBlob);
+
       const dataUrl = capturePhoto();
       photos.push(dataUrl);
       progressEl.textContent = `${i + 1} / 6`;
@@ -219,7 +245,9 @@ const updateSelectionStatus = () => {
 };
 
 const drawImageCover = (ctx, img, x, y, w, h) => {
-  const imgRatio = img.width / img.height;
+  const srcW = img.videoWidth || img.width;
+  const srcH = img.videoHeight || img.height;
+  const imgRatio = srcW / srcH;
   const boxRatio = w / h;
   let drawWidth = w;
   let drawHeight = h;
@@ -250,6 +278,130 @@ const renderPreview = async () => {
   renderComposite(ctx, frameImage, imageElements);
 };
 
+const recordIterationVideo = async () => {
+  // Use an offscreen canvas — no visible recording screen
+  const offCanvas = document.createElement("canvas");
+  offCanvas.width = FRAME_WIDTH;
+  offCanvas.height = FRAME_HEIGHT;
+  const ctx = offCanvas.getContext("2d");
+
+  const frame = frames[selectedFrameIndex] ?? frames[0];
+  const frameImage = await getFrameImage(frame.src);
+  const selectedPhotos = Array.from(selectedIndexes);
+  const frozenImages = await Promise.all(
+    selectedPhotos.map((index) => loadImage(photos[index]))
+  );
+
+  const stream = offCanvas.captureStream(30);
+  let mimeType = "video/webm;codecs=vp9";
+  if (!MediaRecorder.isTypeSupported(mimeType)) {
+    mimeType = "video/webm;codecs=vp8";
+  }
+  if (!MediaRecorder.isTypeSupported(mimeType)) {
+    mimeType = "video/webm";
+  }
+  const mediaRecorder = new MediaRecorder(stream, { mimeType });
+  const chunks = [];
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) chunks.push(e.data);
+  };
+
+  const videoPromise = new Promise((resolve) => {
+    mediaRecorder.onstop = () => {
+      resolve(new Blob(chunks, { type: "video/webm" }));
+    };
+  });
+
+  mediaRecorder.start();
+
+  // Compose each slot by playing back the recorded webcam clip
+  for (let i = 0; i < selectedPhotos.length; i++) {
+    const photoIndex = selectedPhotos[i];
+    const clipBlob = captureClips[photoIndex];
+    const slot = slots[i];
+
+    // Create a video element to play back the saved clip
+    const clipVideo = document.createElement("video");
+    clipVideo.muted = true;
+    clipVideo.playsInline = true;
+    clipVideo.src = URL.createObjectURL(clipBlob);
+    await new Promise((resolve) => { clipVideo.onloadeddata = resolve; });
+    clipVideo.play();
+
+    // Draw the clip into the strip canvas at ~30fps until it ends
+    await new Promise((resolve) => {
+      const drawFrame = () => {
+        if (clipVideo.ended || clipVideo.paused) {
+          resolve();
+          return;
+        }
+
+        ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
+        // Draw previously frozen slots
+        for (let j = 0; j < i; j++) {
+          const s = slots[j];
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(s.x, s.y, s.w, s.h);
+          ctx.clip();
+          drawImageCover(ctx, frozenImages[j], s.x, s.y, s.w, s.h);
+          ctx.restore();
+        }
+
+        // Draw current clip in the current slot
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(slot.x, slot.y, slot.w, slot.h);
+        ctx.clip();
+        drawImageCover(ctx, clipVideo, slot.x, slot.y, slot.w, slot.h);
+        ctx.restore();
+
+        requestAnimationFrame(drawFrame);
+      };
+      requestAnimationFrame(drawFrame);
+    });
+
+    URL.revokeObjectURL(clipVideo.src);
+
+    // Flash effect
+    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.fillRect(slot.x, slot.y, slot.w, slot.h);
+    await wait(100);
+
+    // Freeze: draw the final photo in this slot
+    ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+    ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+    for (let j = 0; j <= i; j++) {
+      const s = slots[j];
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(s.x, s.y, s.w, s.h);
+      ctx.clip();
+      drawImageCover(ctx, frozenImages[j], s.x, s.y, s.w, s.h);
+      ctx.restore();
+    }
+    await wait(500);
+  }
+
+  // Hold the completed strip
+  await wait(800);
+  mediaRecorder.stop();
+
+  // Free memory
+  captureClips = [];
+
+  return await videoPromise;
+};
+
+const blobToDataUrl = (blob) =>
+  new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+
 const exportStrip = async () => {
   await renderPreview();
 
@@ -267,6 +419,12 @@ const exportStrip = async () => {
   downloadLink.href = dataUrl;
   downloadLink.setAttribute("download", "photobooth-strip.png");
 
+  // Show done screen immediately with video loading state
+  qrVideoImage.style.display = "none";
+  if (qrVideoLoading) qrVideoLoading.style.display = "";
+  showScreen("done");
+
+  // Upload photo strip
   try {
     const response = await fetch("/api/upload", {
       method: "POST",
@@ -283,7 +441,25 @@ const exportStrip = async () => {
     qrImage.alt = "QR generation failed";
   }
 
-  showScreen("done");
+  // Compose and upload video in background
+  try {
+    const videoBlob = await recordIterationVideo();
+    const videoDataUrl = await blobToDataUrl(videoBlob);
+    const response = await fetch("/api/upload-video", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataUrl: videoDataUrl })
+    });
+    const result = await response.json();
+    if (result.qrDataUrl) {
+      qrVideoImage.src = result.qrDataUrl;
+      qrVideoImage.style.display = "";
+      if (qrVideoLoading) qrVideoLoading.style.display = "none";
+    }
+  } catch (error) {
+    console.error("Video error:", error);
+    if (qrVideoLoading) qrVideoLoading.textContent = "Video unavailable";
+  }
 };
 
 startBtn.addEventListener("click", startCaptureFlow);
