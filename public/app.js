@@ -417,7 +417,38 @@ const exportStrip = async () => {
 
     const dataUrl = exportCanvas.toDataURL("image/png");
     const singleStripDataUrl = previewCanvas.toDataURL("image/png");
-    lastStripDataUrl = singleStripDataUrl;
+
+    // Build print-ready image with 1.5cm cutoff margins on each end
+    const DPI = 300;
+    const CUTOFF_CM = 1.5;
+    const CUTOFF_PX = Math.round((CUTOFF_CM / 2.54) * DPI); // ~177px
+    const PAGE_W = Math.round(4 * DPI);  // 1200px
+    const PAGE_H = Math.round(6 * DPI);  // 1800px
+    const usableH = PAGE_H - CUTOFF_PX * 2; // ~1446px
+
+    const printCanvas = document.createElement("canvas");
+    printCanvas.width = PAGE_W;
+    printCanvas.height = PAGE_H;
+    const printCtx = printCanvas.getContext("2d");
+    printCtx.fillStyle = "#ffffff";
+    printCtx.fillRect(0, 0, PAGE_W, PAGE_H);
+
+    // Scale the doubled strip to fit usable area proportionally
+    const stripAspect = exportCanvas.width / exportCanvas.height;
+    const usableAspect = PAGE_W / usableH;
+    let drawW, drawH;
+    if (stripAspect > usableAspect) {
+        drawW = PAGE_W;
+        drawH = PAGE_W / stripAspect;
+    } else {
+        drawH = usableH;
+        drawW = usableH * stripAspect;
+    }
+    const offsetX = (PAGE_W - drawW) / 2;
+    const offsetY = CUTOFF_PX + (usableH - drawH) / 2;
+    printCtx.drawImage(exportCanvas, offsetX, offsetY, drawW, drawH);
+
+    lastStripDataUrl = printCanvas.toDataURL("image/png");
 
     downloadLink.href = dataUrl;
     downloadLink.setAttribute("download", "photobooth-strip.png");
@@ -504,3 +535,63 @@ const printStrip = async () => {
 };
 
 printBtn.addEventListener("click", printStrip);
+
+const previewPrintBtn = document.getElementById("preview-print-btn");
+const openPrintPreview = () => {
+    if (!lastStripDataUrl) return;
+    const cutoffPct = ((1.5 / 2.54) / 6 * 100).toFixed(2); // ~9.84%
+    const w = window.open("", "_blank");
+    w.document.write(`<!doctype html>
+<html>
+<head>
+  <title>Print Preview \u2013 4\u00d76</title>
+  <style>
+    @page { size: 4in 6in; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #e0e0e0;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      min-height: 100vh;
+      font-family: system-ui, sans-serif;
+    }
+    .page {
+      width: 4in; height: 6in;
+      background: #fff;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      position: relative;
+      overflow: hidden;
+    }
+    .page img { width: 100%; height: 100%; object-fit: contain; }
+    .cutoff {
+      position: absolute; left: 0; right: 0;
+      height: ${cutoffPct}%;
+      background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,0,0,0.08) 4px, rgba(255,0,0,0.08) 8px);
+      border: 0; pointer-events: none;
+    }
+    .cutoff--top { top: 0; border-bottom: 2px dashed rgba(255,0,0,0.5); }
+    .cutoff--bottom { bottom: 0; border-top: 2px dashed rgba(255,0,0,0.5); }
+    .label { text-align: center; margin-top: 12px; color: #666; font-size: 13px; }
+    .legend { font-size: 12px; color: #999; margin-top: 4px; }
+    @media print {
+      body { background: none; }
+      .page { box-shadow: none; }
+      .cutoff, .label, .legend { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="page">
+      <img src="${lastStripDataUrl}" alt="Photo strip" />
+      <div class="cutoff cutoff--top"></div>
+      <div class="cutoff cutoff--bottom"></div>
+    </div>
+    <p class="label">4 \u00d7 6 in \u2014 Ctrl+P to print or save as PDF</p>
+    <p class="legend">\ud83d\udfe5 Red dashed = 1.5 cm cutoff strips (will be torn off)</p>
+  </div>
+</body>
+</html>`);
+    w.document.close();
+};
+previewPrintBtn.addEventListener("click", openPrintPreview);
