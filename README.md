@@ -18,3 +18,9 @@ If the kiosk uses localhost, phones cannot reach it. Use your machine IP instead
 - Start server with a public base URL:
   - `PUBLIC_BASE_URL=http://<your-ip>:3000 npm start`
 - Then open `http://<your-ip>:3000` on the kiosk browser.
+
+
+
+TO DO:
+
+Create video clips, replacing the picture in the frame version currently
