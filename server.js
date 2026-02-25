@@ -122,12 +122,44 @@ app.post("/api/upload", async (req, res) => {
       format: "png"
     });
 
+    // Save strip locally to exports folder (unique name per session)
+    const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+    const localFilename = `strip-${Date.now()}.png`;
+    const localPath = path.join(exportsDir, localFilename);
+    fs.writeFileSync(localPath, base64Data, "base64");
+
     const downloadUrl = uploadResult.secure_url;
     const qrDataUrl = await QRCode.toDataURL(downloadUrl, { margin: 1, width: 256 });
 
     return res.json({ downloadUrl, qrDataUrl });
   } catch (error) {
     return res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+app.post("/api/upload-print", async (req, res) => {
+  try {
+    const { dataUrl } = req.body;
+    if (!dataUrl || !dataUrl.startsWith("data:image/png")) {
+      return res.status(400).json({ error: "Invalid dataUrl" });
+    }
+
+    if (!process.env.CLOUDINARY_CLOUD_NAME) {
+      return res.status(500).json({ error: "Cloudinary not configured" });
+    }
+
+    const uploadResult = await cloudinary.uploader.upload(dataUrl, {
+      public_id: "photobooth-print",
+      overwrite: true,
+      invalidate: true,
+      resource_type: "image",
+      format: "png"
+    });
+
+    return res.json({ printUrl: uploadResult.secure_url });
+  } catch (error) {
+    console.error("Print upload failed:", error);
+    return res.status(500).json({ error: "Print upload failed" });
   }
 });
 
@@ -142,7 +174,7 @@ app.post("/api/upload-video", async (req, res) => {
       return res.status(500).json({ error: "Cloudinary not configured" });
     }
 
-    const videoPublicId = `photobooth-video-${Date.now()}`;
+    const videoPublicId = "photobooth-video";
     const uploadResult = await cloudinary.uploader.upload(dataUrl, {
       public_id: videoPublicId,
       resource_type: "video",
