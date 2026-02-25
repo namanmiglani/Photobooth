@@ -314,7 +314,10 @@ const recordIterationVideo = async () => {
 
     mediaRecorder.start();
 
-    // Compose each slot by playing back the recorded webcam clip
+    // Fixed duration per slot: 2 seconds each → 8 seconds total for 4 photos
+    const SLOT_DURATION_MS = 2000;
+
+    // Compose each of the 4 selected photos sequentially (slots 0–3)
     for (let i = 0; i < selectedPhotos.length; i++) {
         const photoIndex = selectedPhotos[i];
         const clipBlob = captureClips[photoIndex];
@@ -328,10 +331,13 @@ const recordIterationVideo = async () => {
         await new Promise((resolve) => { clipVideo.onloadeddata = resolve; });
         clipVideo.play();
 
-        // Draw the clip into the strip canvas at ~30fps until it ends
+        // Draw the clip for exactly SLOT_DURATION_MS using a wall-clock timer
+        const slotStart = performance.now();
         await new Promise((resolve) => {
             const drawFrame = () => {
-                if (clipVideo.ended || clipVideo.paused) {
+                const elapsed = performance.now() - slotStart;
+                if (elapsed >= SLOT_DURATION_MS || clipVideo.ended || clipVideo.paused) {
+                    clipVideo.pause();
                     resolve();
                     return;
                 }
