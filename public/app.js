@@ -312,6 +312,9 @@ const recordIterationVideo = async () => {
         };
     });
 
+    // Draw the frame on the canvas BEFORE starting the recorder so it's not black
+    ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+
     mediaRecorder.start();
 
     // Fixed duration per slot: 2 seconds each → 8 seconds total for 4 photos
@@ -328,8 +331,11 @@ const recordIterationVideo = async () => {
         clipVideo.muted = true;
         clipVideo.playsInline = true;
         clipVideo.src = URL.createObjectURL(clipBlob);
-        await new Promise((resolve) => { clipVideo.onloadeddata = resolve; });
-        clipVideo.play();
+        // Wait for canplay (not just loadeddata) so frames are actually decodable
+        await new Promise((resolve) => { clipVideo.oncanplay = resolve; });
+        await clipVideo.play();
+        // Small delay to ensure the first frame is rendered
+        await wait(50);
 
         // Draw the clip for exactly SLOT_DURATION_MS using a wall-clock timer
         const slotStart = performance.now();
@@ -430,14 +436,21 @@ const exportStrip = async () => {
     if (qrVideoLoading) qrVideoLoading.style.display = "";
     showScreen("done");
 
-    // Upload photo strip
+    // Upload photo strip and print in parallel for faster QR display
+    const uploadPhotoPromise = fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl: singleStripDataUrl })
+    }).then((r) => r.json());
+
+    const uploadPrintPromise = fetch("/api/upload-print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl })
+    }).catch((err) => console.error("Print upload failed:", err));
+
     try {
-        const response = await fetch("/api/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ dataUrl: singleStripDataUrl })
-        });
-        const result = await response.json();
+        const [result] = await Promise.all([uploadPhotoPromise, uploadPrintPromise]);
         if (result.downloadUrl) {
             downloadLink.href = result.downloadUrl;
             downloadLink.setAttribute("download", "photobooth-strip.png");
@@ -445,17 +458,6 @@ const exportStrip = async () => {
         }
     } catch (error) {
         qrImage.alt = "QR generation failed";
-    }
-
-    // Upload 4x6 double-strip for admin printing
-    try {
-        await fetch("/api/upload-print", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ dataUrl })
-        });
-    } catch (error) {
-        console.error("Print upload failed:", error);
     }
 
     // Compose and upload video in background
