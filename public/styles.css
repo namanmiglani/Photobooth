@@ -241,3 +241,10 @@ video {
   margin: 40px 0;
   font-style: italic;
 }
+
+.qr-warning {
+  font-weight: 600;
+  color: #d35400;
+  font-size: 0.95rem;
+  margin: 8px 0 4px;
+}

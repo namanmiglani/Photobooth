@@ -43,7 +43,8 @@ const qrVideoImage = document.getElementById("qr-video-image");
 const qrVideoLoading = document.getElementById("qr-video-loading");
 
 let photos = [];
-let captureClips = []; // stores continuous video Blobs for each of the 6 photos
+let captureClips = [];
+
 let selectedIndexes = new Set();
 let selectedFrameIndex = 0;
 const frameCache = new Map();
@@ -178,7 +179,6 @@ const startCaptureFlow = async () => {
         if (!MediaRecorder.isTypeSupported(clipMime)) clipMime = "video/webm";
 
         for (let i = 0; i < 6; i += 1) {
-            // Record a continuous video clip during the countdown
             const clipChunks = [];
             const clipRecorder = new MediaRecorder(video.srcObject, { mimeType: clipMime });
             clipRecorder.ondataavailable = (e) => {
@@ -189,7 +189,7 @@ const startCaptureFlow = async () => {
             });
 
             clipRecorder.start();
-            await runCountdown(2);
+            await runCountdown(4);
             clipRecorder.stop();
 
             const clipBlob = await clipDone;
@@ -279,7 +279,6 @@ const renderPreview = async () => {
 };
 
 const recordIterationVideo = async () => {
-    // Use an offscreen canvas — no visible recording screen
     const offCanvas = document.createElement("canvas");
     offCanvas.width = FRAME_WIDTH;
     offCanvas.height = FRAME_HEIGHT;
@@ -312,57 +311,59 @@ const recordIterationVideo = async () => {
         };
     });
 
-    // Draw the frame on the canvas BEFORE starting the recorder so it's not black
-    ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+    // Helper: draw the frame + all frozen slots so far
+    const drawBase = (frozenCount) => {
+        ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        for (let j = 0; j < frozenCount; j++) {
+            const s = slots[j];
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(s.x, s.y, s.w, s.h);
+            ctx.clip();
+            drawImageCover(ctx, frozenImages[j], s.x, s.y, s.w, s.h);
+            ctx.restore();
+        }
+    };
 
+    // Draw the frame BEFORE starting the recorder so it's not black
+    drawBase(0);
     mediaRecorder.start();
+    await wait(300);
 
-    // Fixed duration per slot: 2 seconds each → 8 seconds total for 4 photos
-    const SLOT_DURATION_MS = 2000;
+    // Play each of the 4 selected clips into their slot — 2 seconds each
+    const CLIP_PLAY_MS = 2000;
 
-    // Compose each of the 4 selected photos sequentially (slots 0–3)
     for (let i = 0; i < selectedPhotos.length; i++) {
         const photoIndex = selectedPhotos[i];
         const clipBlob = captureClips[photoIndex];
         const slot = slots[i];
 
-        // Create a video element to play back the saved clip
+        // Load the clip video
         const clipVideo = document.createElement("video");
         clipVideo.muted = true;
         clipVideo.playsInline = true;
         clipVideo.src = URL.createObjectURL(clipBlob);
-        // Wait for canplay (not just loadeddata) so frames are actually decodable
         await new Promise((resolve) => { clipVideo.oncanplay = resolve; });
         await clipVideo.play();
-        // Small delay to ensure the first frame is rendered
-        await wait(50);
 
-        // Draw the clip for exactly SLOT_DURATION_MS using a wall-clock timer
-        const slotStart = performance.now();
+        // Draw the clip for exactly CLIP_PLAY_MS using setTimeout as authority
+        let stopped = false;
         await new Promise((resolve) => {
+            // setTimeout is the ONLY thing that stops the loop — not clipVideo.ended
+            const timer = setTimeout(() => {
+                stopped = true;
+                clipVideo.pause();
+                resolve();
+            }, CLIP_PLAY_MS);
+
             const drawFrame = () => {
-                const elapsed = performance.now() - slotStart;
-                if (elapsed >= SLOT_DURATION_MS || clipVideo.ended || clipVideo.paused) {
-                    clipVideo.pause();
-                    resolve();
-                    return;
-                }
+                if (stopped) return;
 
-                ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-                ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+                // Draw base (frame + previously frozen slots)
+                drawBase(i);
 
-                // Draw previously frozen slots
-                for (let j = 0; j < i; j++) {
-                    const s = slots[j];
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.rect(s.x, s.y, s.w, s.h);
-                    ctx.clip();
-                    drawImageCover(ctx, frozenImages[j], s.x, s.y, s.w, s.h);
-                    ctx.restore();
-                }
-
-                // Draw current clip in the current slot
+                // Draw the live clip in the current slot
                 ctx.save();
                 ctx.beginPath();
                 ctx.rect(slot.x, slot.y, slot.w, slot.h);
@@ -382,23 +383,13 @@ const recordIterationVideo = async () => {
         ctx.fillRect(slot.x, slot.y, slot.w, slot.h);
         await wait(100);
 
-        // Freeze: draw the final photo in this slot
-        ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-        ctx.drawImage(frameImage, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-        for (let j = 0; j <= i; j++) {
-            const s = slots[j];
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(s.x, s.y, s.w, s.h);
-            ctx.clip();
-            drawImageCover(ctx, frozenImages[j], s.x, s.y, s.w, s.h);
-            ctx.restore();
-        }
+        // Freeze: draw the final photo fully in this slot
+        drawBase(i + 1);
         await wait(500);
     }
 
     // Hold the completed strip
-    await wait(800);
+    await wait(1000);
     mediaRecorder.stop();
 
     // Free memory
