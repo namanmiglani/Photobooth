@@ -63,9 +63,9 @@ app.get("/view/:file", (req, res) => {
       <h2>Your photobooth strip</h2>
       <img src="${imageUrl}" alt="Photobooth strip" />
       <div>
-        <a href="${imageUrl}" download>Download PNG</a>
+        <a href="${imageUrl.replace("/exports/", "/download/")}" download>Download PNG</a>
       </div>
-      <p>Tip: On iPhone/Android, tap the image to open, then save to Photos.</p>
+      <p><strong>iPhone:</strong> Tap Download, then tap the Safari address bar icon (AA or ↓) and select "Downloads" to save the image to your Photos.</p>
     </div>
   </body>
 </html>`);
@@ -95,9 +95,10 @@ app.get("/view-video/:id", async (req, res) => {
       <h2>Your photobooth video</h2>
       <video src="${mp4Url}" controls playsinline autoplay muted loop></video>
       <div>
-        <a href="${mp4Url}" download>Download Video</a>
+        <a href="${mp4Url.replace("/video/upload/", "/video/upload/fl_attachment/")}" download="photobooth-video.mp4">Download Video</a>
       </div>
-      <p class="tip">iPhone: Tap and hold the video, then tap "Save to Files" or use the download button.</p>
+      <p class="tip"><strong>iPhone:</strong> Tap Download, then tap the "AA" or ↓ icon in the address bar to view Downloads and "Save Video".</p>
+      <p class="tip"><strong>Android:</strong> Tap Download to save directly to your gallery.</p>
     </div>
   </body>
 </html>`);
@@ -114,10 +115,10 @@ app.post("/api/upload", async (req, res) => {
       return res.status(500).json({ error: "Cloudinary not configured" });
     }
 
+    const uniqueId = `strip-${nanoid(10)}`;
     const uploadResult = await cloudinary.uploader.upload(dataUrl, {
-      public_id: CLOUDINARY_PUBLIC_ID,
-      overwrite: true,
-      invalidate: true,
+      public_id: uniqueId,
+      overwrite: false,
       resource_type: "image",
       format: "png"
     });
@@ -174,19 +175,18 @@ app.post("/api/upload-video", async (req, res) => {
       return res.status(500).json({ error: "Cloudinary not configured" });
     }
 
-    const videoPublicId = "photobooth-video";
+    const videoPublicId = `video-${nanoid(10)}`;
     const uploadResult = await cloudinary.uploader.upload(dataUrl, {
       public_id: videoPublicId,
       resource_type: "video",
-      overwrite: true,
-      invalidate: true
+      overwrite: false
     });
 
     // Build an MP4 URL for iPhone compatibility
     const baseUrl = uploadResult.secure_url.replace(/\.[^.]+$/, ".mp4");
     const publicBaseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
     const viewUrl = `${publicBaseUrl}/view-video/${videoPublicId}`;
-    const qrDataUrl = await QRCode.toDataURL(baseUrl, { margin: 1, width: 256 });
+    const qrDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 256 });
 
     return res.json({ videoUrl: baseUrl, viewUrl, qrDataUrl });
   } catch (error) {

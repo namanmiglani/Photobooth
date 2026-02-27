@@ -41,6 +41,7 @@ const restartBtn = document.getElementById("restart-btn");
 const retakeBtn = document.getElementById("retake-btn");
 const qrVideoImage = document.getElementById("qr-video-image");
 const qrVideoLoading = document.getElementById("qr-video-loading");
+const flashEl = document.getElementById("flash");
 
 let photos = [];
 let captureClips = [];
@@ -195,6 +196,13 @@ const startCaptureFlow = async () => {
             const clipBlob = await clipDone;
             captureClips.push(clipBlob);
 
+            // Trigger flash animation
+            if (flashEl) {
+                flashEl.classList.remove("flash-animation");
+                void flashEl.offsetWidth; // Force reflow
+                flashEl.classList.add("flash-animation");
+            }
+
             const dataUrl = capturePhoto();
             photos.push(dataUrl);
             progressEl.textContent = `${i + 1} / 6`;
@@ -331,8 +339,8 @@ const recordIterationVideo = async () => {
     mediaRecorder.start();
     await wait(300);
 
-    // Play each of the 4 selected clips into their slot — 2 seconds each
-    const CLIP_PLAY_MS = 2000;
+    // Play each of the 4 selected clips into their slot — 1.2 seconds each
+    const CLIP_PLAY_MS = 1200;
 
     for (let i = 0; i < selectedPhotos.length; i++) {
         const photoIndex = selectedPhotos[i];
@@ -440,29 +448,32 @@ const exportStrip = async () => {
         body: JSON.stringify({ dataUrl })
     }).catch((err) => console.error("Print upload failed:", err));
 
+    // Start recording video in parallel with photo uploads
+    const videoBlobPromise = recordIterationVideo();
+
     try {
-        const [result] = await Promise.all([uploadPhotoPromise, uploadPrintPromise]);
-        if (result.downloadUrl) {
-            downloadLink.href = result.downloadUrl;
+        const [photoResult] = await Promise.all([uploadPhotoPromise, uploadPrintPromise]);
+        if (photoResult && photoResult.downloadUrl) {
+            downloadLink.href = photoResult.downloadUrl;
             downloadLink.setAttribute("download", "photobooth-strip.png");
-            qrImage.src = result.qrDataUrl;
+            qrImage.src = photoResult.qrDataUrl;
         }
     } catch (error) {
         qrImage.alt = "QR generation failed";
     }
 
-    // Compose and upload video in background
+    // Capture the already-started video recording and upload
     try {
-        const videoBlob = await recordIterationVideo();
+        const videoBlob = await videoBlobPromise;
         const videoDataUrl = await blobToDataUrl(videoBlob);
         const response = await fetch("/api/upload-video", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ dataUrl: videoDataUrl })
         });
-        const result = await response.json();
-        if (result.qrDataUrl) {
-            qrVideoImage.src = result.qrDataUrl;
+        const videoResult = await response.json();
+        if (videoResult.qrDataUrl) {
+            qrVideoImage.src = videoResult.qrDataUrl;
             qrVideoImage.style.display = "";
             if (qrVideoLoading) qrVideoLoading.style.display = "none";
         }
