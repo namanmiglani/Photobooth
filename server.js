@@ -186,7 +186,7 @@ app.post("/api/upload-video", async (req, res) => {
     const baseUrl = uploadResult.secure_url.replace(/\.[^.]+$/, ".mp4");
     const publicBaseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
     const viewUrl = `${publicBaseUrl}/view-video/${videoPublicId}`;
-    const qrDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 256 });
+    const qrDataUrl = await QRCode.toDataURL(baseUrl, { margin: 1, width: 256 });
 
     return res.json({ videoUrl: baseUrl, viewUrl, qrDataUrl });
   } catch (error) {
